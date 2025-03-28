@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Image Mixer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #outputContainer img {
+            max-width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Image Mixer</h2>
+    <input type="file" id="imageInput" multiple accept="image/*">
+    <br><br>
+    <label for="sliceCount">Number of Slices (10-50):</label>
+    <input type="number" id="sliceCount" min="10" max="50" value="25">
+    <br><br>
+    <label for="edgeColor">Edge Color:</label>
+    <input type="color" id="edgeColor" value="#FFD700">
+    <br><br>
+    <button id="mixButton">Mix Images</button>
+    <div id="outputContainer"></div>
+
+    <script>
+        let images = [];
+        let imageObjects = [];
+
+        function preload() {
+            // This function is called before setup to ensure images are loaded
+        }
+
+        function setup() {
+            // Create a hidden canvas for processing
+            let canvas = createCanvas(600, 600);
+            canvas.hide();
+
+            // Event listener for file input
+            select('#imageInput').changed(handleFileSelect);
+
+            // Event listener for mix button
+            select('#mixButton').mousePressed(processImages);
+        }
+
+        function handleFileSelect() {
+            // Clear previous images
+            images = [];
+            imageObjects = [];
+
+            // Get selected files
+            let fileInput = document.getElementById('imageInput');
+            let files = fileInput.files;
+
+            // Load images
+            for (let i = 0; i < files.length; i++) {
+                let reader = new FileReader();
+                reader.onload = function (e) {
+                    let img = loadImage(e.target.result,
+                        () => {
+                            images.push(img);
+                            if (images.length === files.length) {
+                                console.log(`Loaded ${images.length} images`);
+                            }
+                        },
+                        () => {
+                            console.error(`Error loading image ${i}`);
+                        }
+                    );
+                }
+                reader.readAsDataURL(files[i]);
+            }
+        }
+
+        function processImages() {
+            // Validate image count
+            if (images.length < 2) {
+                alert('Please select at least 2 images');
+                return;
+            }
+
+            // Get parameters
+            let sliceCount = parseInt(document.getElementById('sliceCount').value);
+            let edgeColor = document.getElementById('edgeColor').value;
+
+            // Ensure canvas is visible for processing
+            canvas.show();
+            background(255);
+
+            // Find the smallest image dimensions
+            let minWidth = Infinity;
+            let minHeight = Infinity;
+            images.forEach(img => {
+                minWidth = min(minWidth, img.width);
+                minHeight = min(minHeight, img.height);
+            });
+
+            // Resize all images to square
+            let resizedImages = images.map(img => {
+                let resized = createImage(minWidth, minHeight);
+                resized.copy(img, 0, 0, img.width, img.height, 0, 0, minWidth, minHeight);
+                return resized;
+            });
+
+            // Slice and mix images
+            let sliceWidth = width / sliceCount;
+
+            for (let i = 0; i < sliceCount; i++) {
+                // Randomly select an image for this slice
+                let selectedImg = random(resizedImages);
+
+                // Calculate source and destination x positions
+                let sourceX = map(i, 0, sliceCount, 0, selectedImg.width);
+                let destX = i * sliceWidth;
+
+                // Draw the slice
+                image(selectedImg,
+                    destX, 0,
+                    sliceWidth, height,
+                    sourceX, 0,
+                    sliceWidth, height
+                );
+            }
+
+            // Edge detection and color overlay
+            loadPixels();
+            let edgeDetectionKernel = [
+                [-1, -1, -1],
+                [-1, 8, -1],
+                [-1, -1, -1]
+            ];
+
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let sumR = 0, sumG = 0, sumB = 0;
+
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            let pixelIndex = 4 * ((y + ky) * width + (x + kx));
+                            let kernelValue = edgeDetectionKernel[ky + 1][kx + 1];
+
+                            sumR += pixels[pixelIndex] * kernelValue;
+                            sumG += pixels[pixelIndex + 1] * kernelValue;
+                            sumB += pixels[pixelIndex + 2] * kernelValue;
+                        }
+                    }
+
+                    // If edge detected, apply color
+                    if (abs(sumR) + abs(sumG) + abs(sumB) > 100) {
+                        let edgeRGB = color(edgeColor);
+                        let pixelIndex = 4 * (y * width + x);
+                        pixels[pixelIndex] = red(edgeRGB);
+                        pixels[pixelIndex + 1] = green(edgeRGB);
+                        pixels[pixelIndex + 2] = blue(edgeRGB);
+                    }
+                }
+            }
+
+            updatePixels();
+
+            // Convert to black and white
+            filter(GRAY);
+
+            // Save or display result
+            let outputContainer = document.getElementById('outputContainer');
+            outputContainer.innerHTML = ''; // Clear previous output
+            let resultImg = createImg(get());
+            resultImg.parent(outputContainer);
+
+            // Hide canvas after processing
+            canvas.hide();
+        }
+
+        // Ensure p5.js functions are available
+        window.preload = preload;
+        window.setup = setup;
+    </script>
+</body>
+
+</html>
