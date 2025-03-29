@@ -41,6 +41,26 @@
             android:text="Pick Color" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Effect Threshold (1-50): "
+            android:layout_gravity="center_vertical" />
+
+        <SeekBar
+            android:id="@+id/thresholdSeekBar"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:max="49"
+            android:progress="9" /> <!-- Default 10 (9 + 1) -->
+    </LinearLayout>
+
     <Button
         android:id="@+id/generateButton"
         android:layout_width="wrap_content"
@@ -70,8 +90,8 @@
 
     <ImageView
         android:id="@+id/outputImageView"
-        android:layout_width="398dp"
-        android:layout_height="426dp"
+        android:layout_width="378dp"
+        android:layout_height="402dp"
         android:layout_marginTop="16dp"
         android:scaleType="fitCenter" />
 

@@ -30,14 +30,17 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int OUTPUT_SIZE = 1080; // 1:1 square output size in pixels
     private List<Bitmap> images = new ArrayList<>();
     private int edgeColor = Color.parseColor("#FF00FF"); // Default glitch color (magenta)
+    private int effectThreshold = 10; // Default threshold (1-50)
     private ImageView outputImageView;
     private EditText stripCountInput;
+    private SeekBar thresholdSeekBar;
     private Bitmap finalBitmap; // Store the generated image for saving/sharing
 
     // Launcher for picking multiple images
@@ -80,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         Button selectImagesButton = findViewById(R.id.selectImagesButton);
         stripCountInput = findViewById(R.id.stripCountInput);
         Button colorPickerButton = findViewById(R.id.colorPickerButton);
+        thresholdSeekBar = findViewById(R.id.thresholdSeekBar);
         Button generateButton = findViewById(R.id.generateButton);
         outputImageView = findViewById(R.id.outputImageView);
         Button saveButton = findViewById(R.id.saveButton);
@@ -95,6 +99,19 @@ public class MainActivity extends AppCompatActivity {
 
         // Pick color with a spectrum dialog
         colorPickerButton.setOnClickListener(v -> showColorPickerDialog());
+
+        // Update effect threshold dynamically
+        thresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                effectThreshold = progress + 1; // Range 1-50 (progress is 0-49)
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
 
         // Generate image
         generateButton.setOnClickListener(v -> {
@@ -148,11 +165,10 @@ public class MainActivity extends AppCompatActivity {
         SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int r = redSeekBar.getProgress();
-                int g = greenSeekBar.getProgress();
-                int b = blueSeekBar.getProgress();
-                int newColor = Color.rgb(r, g, b);
-                colorPreview.setBackgroundColor(newColor);
+                int red = redSeekBar.getProgress();
+                int green = greenSeekBar.getProgress();
+                int blue = blueSeekBar.getProgress();
+                colorPreview.setBackgroundColor(Color.rgb(red, green, blue));
             }
 
             @Override
@@ -160,6 +176,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {}
         };
+
         redSeekBar.setOnSeekBarChangeListener(listener);
         greenSeekBar.setOnSeekBarChangeListener(listener);
         blueSeekBar.setOnSeekBarChangeListener(listener);
@@ -200,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
         // Calculate strip width
         int stripWidth = OUTPUT_SIZE / stripCount;
 
-        // Create strips
+        // Create strips from all images
         List<Bitmap> allStrips = new ArrayList<>();
         for (Bitmap img : resizedImages) {
             for (int i = 0; i < stripCount; i++) {
@@ -209,10 +226,13 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Shuffle strips (structured randomness for face-like coherence)
-        Collections.shuffle(allStrips.subList(0, stripCount)); // Shuffle first image's strips
-        for (int i = 1; i < resizedImages.size(); i++) {
-            Collections.shuffle(allStrips.subList(i * stripCount, (i + 1) * stripCount));
+        // Randomly select `stripCount` strips from all available strips
+        List<Bitmap> selectedStrips = new ArrayList<>();
+        Random random = new Random();
+        int totalStrips = allStrips.size(); // Total strips = stripCount * number of images
+        for (int i = 0; i < stripCount; i++) {
+            int randomIndex = random.nextInt(totalStrips);
+            selectedStrips.add(allStrips.get(randomIndex));
         }
 
         // Create final bitmap
@@ -220,12 +240,12 @@ public class MainActivity extends AppCompatActivity {
         Canvas canvas = new Canvas(finalBitmap);
         canvas.drawColor(Color.WHITE); // White background
 
-        // Draw strips
+        // Draw the randomly selected strips
         for (int i = 0; i < stripCount; i++) {
-            canvas.drawBitmap(allStrips.get(i), i * stripWidth, 0, null);
+            canvas.drawBitmap(selectedStrips.get(i), i * stripWidth, 0, null);
         }
 
-        // Apply effects
+        // Apply effects with threshold
         applyEffects(finalBitmap);
 
         // Display result
@@ -248,8 +268,7 @@ public class MainActivity extends AppCompatActivity {
             pixels[i] = Color.rgb(brightness, brightness, brightness);
         }
 
-        // Edge detection and glitch effect
-        int edgeThreshold = 10;
+        // Edge detection and glitch effect with adjustable threshold
         int edgeR = Color.red(edgeColor);
         int edgeG = Color.green(edgeColor);
         int edgeB = Color.blue(edgeColor);
@@ -263,10 +282,10 @@ public class MainActivity extends AppCompatActivity {
                 int up = Color.red(tempPixels[x + (y - 1) * width]);
                 int down = Color.red(tempPixels[x + (y + 1) * width]);
 
-                if (Math.abs(current - left) > edgeThreshold ||
-                        Math.abs(current - right) > edgeThreshold ||
-                        Math.abs(current - up) > edgeThreshold ||
-                        Math.abs(current - down) > edgeThreshold) {
+                if (Math.abs(current - left) > effectThreshold ||
+                        Math.abs(current - right) > effectThreshold ||
+                        Math.abs(current - up) > effectThreshold ||
+                        Math.abs(current - down) > effectThreshold) {
                     pixels[index] = Color.rgb(edgeR, edgeG, edgeB);
                 }
             }
