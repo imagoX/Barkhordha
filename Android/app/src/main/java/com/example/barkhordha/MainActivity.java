@@ -34,12 +34,13 @@ import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int OUTPUT_SIZE = 1080; // 1:1 square output size in pixels
     private List<Bitmap> images = new ArrayList<>();
     private int edgeColor = Color.parseColor("#FF00FF"); // Default glitch color (magenta)
-    private int effectThreshold = 10; // Default threshold (1-50)
+    private int effectThreshold = 0; // Threshold (0-100, 0 = no glitch, 100 = max glitch)
+    private int outputSize = 1080; // Default output size, will be set by user input
     private ImageView outputImageView;
     private EditText stripCountInput;
+    private EditText outputSizeInput; // New input for output size
     private SeekBar thresholdSeekBar;
     private Bitmap finalBitmap; // Store the generated image for saving/sharing
 
@@ -82,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
 
         Button selectImagesButton = findViewById(R.id.selectImagesButton);
         stripCountInput = findViewById(R.id.stripCountInput);
+        outputSizeInput = findViewById(R.id.outputSizeInput); // New input field
         Button colorPickerButton = findViewById(R.id.colorPickerButton);
         thresholdSeekBar = findViewById(R.id.thresholdSeekBar);
         Button generateButton = findViewById(R.id.generateButton);
@@ -100,17 +102,22 @@ public class MainActivity extends AppCompatActivity {
         // Pick color with a spectrum dialog
         colorPickerButton.setOnClickListener(v -> showColorPickerDialog());
 
-        // Update effect threshold dynamically
+        // Update effect threshold dynamically (0-100)
+        thresholdSeekBar.setMax(100); // Range 0-100
+        thresholdSeekBar.setProgress(0); // Default to 0 (no glitch)
         thresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                effectThreshold = progress + 1; // Range 1-50 (progress is 0-49)
+                effectThreshold = progress; // Range 0-100
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {}
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
         });
 
         // Generate image
@@ -172,9 +179,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {}
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
         };
 
         redSeekBar.setOnSeekBarChangeListener(listener);
@@ -191,11 +201,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void generateGlitchedImage() {
+        // Get output size from user input
+        try {
+            outputSize = Integer.parseInt(outputSizeInput.getText().toString());
+            if (outputSize < 720 || outputSize > 5000) {
+                Toast.makeText(this, "Output size must be between 720 and 5000", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } catch (NumberFormatException e) {
+            Toast.makeText(this, "Please enter a valid output size", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         int stripCount;
         try {
             stripCount = Integer.parseInt(stripCountInput.getText().toString());
-            if (stripCount < 10 || stripCount > 100) {
-                Toast.makeText(this, "Strip count must be between 10 and 100", Toast.LENGTH_SHORT).show();
+            if (stripCount < 2 || stripCount > 300) {
+                Toast.makeText(this, "Strip count must be between 2 and 300", Toast.LENGTH_SHORT).show();
                 return;
             }
         } catch (NumberFormatException e) {
@@ -203,49 +225,54 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Resize all images to 1080x1080
+        // Resize all images to the specified output size
         List<Bitmap> resizedImages = new ArrayList<>();
         for (Bitmap img : images) {
-            float scaleFactor = Math.max((float) OUTPUT_SIZE / img.getWidth(), (float) OUTPUT_SIZE / img.getHeight());
+            float scaleFactor = Math.max((float) outputSize / img.getWidth(), (float) outputSize / img.getHeight());
             int newWidth = (int) (img.getWidth() * scaleFactor);
             int newHeight = (int) (img.getHeight() * scaleFactor);
             Bitmap scaled = Bitmap.createScaledBitmap(img, newWidth, newHeight, true);
-            Bitmap cropped = Bitmap.createBitmap(scaled, (newWidth - OUTPUT_SIZE) / 2, (newHeight - OUTPUT_SIZE) / 2, OUTPUT_SIZE, OUTPUT_SIZE);
+            Bitmap cropped = Bitmap.createBitmap(scaled, (newWidth - outputSize) / 2, (newHeight - outputSize) / 2, outputSize, outputSize);
             resizedImages.add(cropped);
         }
 
         // Calculate strip width
-        int stripWidth = OUTPUT_SIZE / stripCount;
+        int stripWidth = outputSize / stripCount;
 
         // Create strips from all images
         List<Bitmap> allStrips = new ArrayList<>();
         for (Bitmap img : resizedImages) {
             for (int i = 0; i < stripCount; i++) {
-                Bitmap strip = Bitmap.createBitmap(img, i * stripWidth, 0, stripWidth, OUTPUT_SIZE);
+                Bitmap strip = Bitmap.createBitmap(img, i * stripWidth, 0, stripWidth, outputSize);
                 allStrips.add(strip);
             }
         }
 
-        // Randomly select `stripCount` strips from all available strips
-        List<Bitmap> selectedStrips = new ArrayList<>();
-        Random random = new Random();
+        // Check if we have enough strips to avoid repeats
         int totalStrips = allStrips.size(); // Total strips = stripCount * number of images
-        for (int i = 0; i < stripCount; i++) {
-            int randomIndex = random.nextInt(totalStrips);
-            selectedStrips.add(allStrips.get(randomIndex));
+        if (stripCount > totalStrips) {
+            Toast.makeText(this, "Not enough unique strips! Need at least " + stripCount + " strips, but only " + totalStrips + " available.", Toast.LENGTH_LONG).show();
+            return;
         }
 
-        // Create final bitmap
-        finalBitmap = Bitmap.createBitmap(OUTPUT_SIZE, OUTPUT_SIZE, Bitmap.Config.ARGB_8888);
+        // Shuffle the list of strips and select the first `stripCount` strips to ensure no repeats
+        List<Bitmap> selectedStrips = new ArrayList<>();
+        Collections.shuffle(allStrips, new Random());
+        for (int i = 0; i < stripCount; i++) {
+            selectedStrips.add(allStrips.get(i));
+        }
+
+        // Create final bitmap with the specified output size
+        finalBitmap = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(finalBitmap);
         canvas.drawColor(Color.WHITE); // White background
 
-        // Draw the randomly selected strips
+        // Draw the selected strips
         for (int i = 0; i < stripCount; i++) {
             canvas.drawBitmap(selectedStrips.get(i), i * stripWidth, 0, null);
         }
 
-        // Apply effects with threshold
+        // Apply glitch effect with threshold
         applyEffects(finalBitmap);
 
         // Display result
@@ -258,40 +285,62 @@ public class MainActivity extends AppCompatActivity {
         int[] pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
 
-        // Convert to grayscale
+        // Keep original pixels
+        int[] originalPixels = pixels.clone();
         int[] tempPixels = pixels.clone(); // For edge detection
-        for (int i = 0; i < pixels.length; i++) {
-            int r = Color.red(pixels[i]);
-            int g = Color.green(pixels[i]);
-            int b = Color.blue(pixels[i]);
+
+        // Convert tempPixels to grayscale for edge detection
+        for (int i = 0; i < tempPixels.length; i++) {
+            int r = Color.red(tempPixels[i]);
+            int g = Color.green(tempPixels[i]);
+            int b = Color.blue(tempPixels[i]);
             int brightness = (r + g + b) / 3;
-            pixels[i] = Color.rgb(brightness, brightness, brightness);
+            tempPixels[i] = Color.rgb(brightness, brightness, brightness);
         }
 
-        // Edge detection and glitch effect with adjustable threshold
+        // Edge detection with adjustable threshold
         int edgeR = Color.red(edgeColor);
         int edgeG = Color.green(edgeColor);
         int edgeB = Color.blue(edgeColor);
 
+        // Map threshold (0-100) to edge sensitivity (e.g., 50 to 5)
+        // At threshold 0, sensitivity is high (less glitch); at 100, sensitivity is low (more glitch)
+        float edgeSensitivity = 50.0f - (effectThreshold * 0.45f); // Maps 0->50 to 100->5
+
+        // Create a new array for the output pixels
+        int[] newPixels = originalPixels.clone();
+
+        // Detect edges and apply glitch effect
         for (int y = 1; y < height - 1; y++) {
             for (int x = 1; x < width - 1; x++) {
                 int index = x + y * width;
-                int current = Color.red(tempPixels[index]); // Use red channel for simplicity
+                int current = Color.red(tempPixels[index]);
                 int left = Color.red(tempPixels[(x - 1) + y * width]);
                 int right = Color.red(tempPixels[(x + 1) + y * width]);
                 int up = Color.red(tempPixels[x + (y - 1) * width]);
                 int down = Color.red(tempPixels[x + (y + 1) * width]);
 
-                if (Math.abs(current - left) > effectThreshold ||
-                        Math.abs(current - right) > effectThreshold ||
-                        Math.abs(current - up) > effectThreshold ||
-                        Math.abs(current - down) > effectThreshold) {
-                    pixels[index] = Color.rgb(edgeR, edgeG, edgeB);
+                // Detect edge based on sensitivity
+                if (Math.abs(current - left) > edgeSensitivity ||
+                        Math.abs(current - right) > edgeSensitivity ||
+                        Math.abs(current - up) > edgeSensitivity ||
+                        Math.abs(current - down) > edgeSensitivity) {
+                    // Apply glitch color to the edge pixel
+                    newPixels[index] = Color.rgb(edgeR, edgeG, edgeB);
+                    // Optionally, apply to adjacent pixels for a "line" effect
+                    if (x > 0)
+                        newPixels[(x - 1) + y * width] = Color.rgb(edgeR, edgeG, edgeB); // Left
+                    if (x < width - 1)
+                        newPixels[(x + 1) + y * width] = Color.rgb(edgeR, edgeG, edgeB); // Right
+                    if (y > 0)
+                        newPixels[x + (y - 1) * width] = Color.rgb(edgeR, edgeG, edgeB); // Up
+                    if (y < height - 1)
+                        newPixels[x + (y + 1) * width] = Color.rgb(edgeR, edgeG, edgeB); // Down
                 }
             }
         }
 
-        bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+        bitmap.setPixels(newPixels, 0, width, 0, 0, width, height);
     }
 
     private void saveImageToGallery(Bitmap bitmap) {
